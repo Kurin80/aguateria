@@ -2289,16 +2289,22 @@ function registerOps(r: Hono<AppEnv>): void {
 
   r.get("/users", requirePermission("usuarios.ver"), async (c) => {
     const companyId = c.get("user")!.companyId;
-    const rows = await c.get("db").select({
-      id: t.users.id,
-      email: t.users.email,
-      username: t.users.username,
-      fullName: t.users.fullName,
-      phone: t.users.phone,
-      active: t.users.active,
-      lastLoginAt: t.users.lastLoginAt,
-      roleCode: sql<string>`(select r.code from user_roles ur join roles r on r.id = ur.role_id where ur.user_id = ${t.users.id} limit 1)`,
-    }).from(t.users).where(and(eq(t.users.companyId, companyId), isNull(t.users.deletedAt))).orderBy(t.users.fullName);
+    const rows = await c.get("db")
+      .select({
+        id: t.users.id,
+        email: t.users.email,
+        username: t.users.username,
+        fullName: t.users.fullName,
+        phone: t.users.phone,
+        active: t.users.active,
+        lastLoginAt: t.users.lastLoginAt,
+        roleCode: t.roles.code,
+      })
+      .from(t.users)
+      .leftJoin(t.userRoles, eq(t.userRoles.userId, t.users.id))
+      .leftJoin(t.roles, eq(t.roles.id, t.userRoles.roleId))
+      .where(and(eq(t.users.companyId, companyId), isNull(t.users.deletedAt)))
+      .orderBy(t.users.fullName);
     return c.json({ data: rows });
   });
 
