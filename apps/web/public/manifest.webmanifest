@@ -1,0 +1,19 @@
+{
+  "name": "Aguatería",
+  "short_name": "Aguatería",
+  "description": "Gestión de agua potable y trabajo de campo",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b3d4a",
+  "theme_color": "#0b3d4a",
+  "lang": "es-PY",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

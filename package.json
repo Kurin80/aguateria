@@ -1,0 +1,36 @@
+{
+  "name": "aguateria",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Plataforma de gestión integral para prestadores de agua potable en Paraguay",
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:web": "npm run dev -w @aguateria/web",
+    "dev:api": "npm run dev -w @aguateria/api",
+    "dev:client": "npm run dev:web",
+    "dev:server": "npm run dev:api",
+    "build": "npm run build -w @aguateria/shared && npm run build -w @aguateria/api && npm run build -w @aguateria/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:create": "npm run db:create -w @aguateria/api",
+    "db:migrate": "npm run db:migrate -w @aguateria/api",
+    "db:seed": "npm run db:seed -w @aguateria/api",
+    "db:seed-demo-field": "npm run db:seed-demo-field -w @aguateria/api",
+    "db:sync-rbac": "npm run db:sync-rbac -w @aguateria/api",
+    "seed": "npm run db:seed"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}

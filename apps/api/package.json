@@ -1,0 +1,50 @@
+{
+  "name": "@aguateria/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node ../../node_modules/tsx/dist/cli.mjs watch src/server.ts",
+    "build": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "lint": "node ../../node_modules/eslint/bin/eslint.js src --ext .ts",
+    "test": "node ../../node_modules/vitest/vitest.mjs run",
+    "db:create": "node ../../node_modules/tsx/dist/cli.mjs src/scripts/create-db.ts",
+    "db:migrate": "node ../../node_modules/tsx/dist/cli.mjs src/scripts/migrate.ts",
+    "db:seed": "node ../../node_modules/tsx/dist/cli.mjs src/scripts/seed.ts",
+    "db:seed-demo-field": "node ../../node_modules/tsx/dist/cli.mjs src/scripts/seed-demo-field.ts",
+    "db:sync-rbac": "node ../../node_modules/tsx/dist/cli.mjs src/scripts/sync-rbac.ts",
+    "smoke:disconnect": "node ../../node_modules/tsx/dist/cli.mjs src/scripts/smoke-disconnect.ts"
+  },
+  "dependencies": {
+    "@aguateria/shared": "*",
+    "@hono/node-server": "^1.14.1",
+    "@hono/zod-validator": "^0.4.3",
+    "@supabase/supabase-js": "^2.49.1",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.2",
+    "hash-wasm": "^4.12.0",
+    "hono": "^4.7.4",
+    "jose": "^6.0.10",
+    "luxon": "^3.5.0",
+    "nodemailer": "^9.1.1",
+    "pdfkit": "^0.16.0",
+    "postgres": "^3.4.5",
+    "qrcode": "^1.5.4",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.21.0",
+    "@types/luxon": "^3.4.2",
+    "@types/node": "^22.13.10",
+    "@types/nodemailer": "^8.0.1",
+    "@types/pdfkit": "^0.13.9",
+    "@types/qrcode": "^1.5.6",
+    "eslint": "^9.21.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.26.0",
+    "vitest": "^3.0.8"
+  }
+}
