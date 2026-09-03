@@ -1,6 +1,7 @@
 {
   "name": "aguateria",
   "private": true,
+  "type": "module",
   "version": "0.1.0",
   "description": "Plataforma de gestión integral para prestadores de agua potable en Paraguay",
   "workspaces": [
