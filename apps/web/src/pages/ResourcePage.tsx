@@ -16,7 +16,7 @@ export type Column = {
 export type FieldDef = {
   key: string;
   label: string;
-  type?: "text" | "email" | "tel" | "date" | "number" | "textarea" | "select";
+  type?: "text" | "email" | "tel" | "date" | "number" | "textarea" | "select" | "password";
   required?: boolean;
   readOnly?: boolean;
   options?: Array<{ value: string; label: string }>;
@@ -291,7 +291,9 @@ function EntityForm({
           const payload: Record<string, string> = {};
           for (const f of fields) {
             if (f.visibleWhen && values[f.visibleWhen.key] !== f.visibleWhen.is) continue;
-            const v = values[f.key]?.trim() ?? "";
+            const raw = values[f.key] ?? "";
+            // No recortar contraseñas: el login compara el valor exacto.
+            const v = f.type === "password" ? raw : raw.trim();
             if (v) payload[f.key] = v;
           }
           onSubmit(payload);
@@ -331,6 +333,7 @@ function EntityForm({
                 required={f.required}
                 readOnly={f.readOnly}
                 type={f.type === "number" ? "text" : f.type ?? "text"}
+                autoComplete={f.type === "password" ? "new-password" : undefined}
                 inputMode={isMoneyField(f) ? "numeric" : f.type === "number" ? "decimal" : undefined}
                 value={values[f.key] ?? ""}
                 onChange={(e) =>

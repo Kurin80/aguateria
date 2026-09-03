@@ -19,6 +19,7 @@ import { BillsPage, PeriodsPage, ReadingsPage } from "./pages/OperationsPages";
 import { InstallationsPage } from "./pages/InstallationsPage";
 import { CollectionPage } from "./pages/CollectionPage";
 import { DisconnectionsPage } from "./pages/DisconnectionsPage";
+import { UsersPage } from "./pages/UsersPage";
 
 const MapPage = lazy(() => import("./pages/MapPage").then((m) => ({ default: m.MapPage })));
 
@@ -446,29 +447,7 @@ export default function App() {
           }
         />
         <Route path="reportes" element={<ReportsPage />} />
-        <Route
-          path="usuarios"
-          element={
-            <ResourcePage
-              title="Usuarios"
-              path="/users"
-              createPermission="usuarios.crear"
-              columns={[
-                { key: "email", label: "Email" },
-                { key: "username", label: "Usuario" },
-                { key: "fullName", label: "Nombre" },
-                { key: "active", label: "Activo" },
-              ]}
-              fields={[
-                { key: "email", label: "Email", type: "email", required: true },
-                { key: "username", label: "Usuario", required: true },
-                { key: "fullName", label: "Nombre completo", required: true },
-                { key: "password", label: "Contraseña", required: true },
-                { key: "roleCode", label: "Rol", required: true, optionsPath: "/roles", optionValue: "code", optionLabel: "name" },
-              ]}
-            />
-          }
-        />
+        <Route path="usuarios" element={<UsersPage />} />
         <Route
           path="auditoria"
           element={

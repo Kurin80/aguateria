@@ -2288,9 +2288,17 @@ function registerOps(r: Hono<AppEnv>): void {
   });
 
   r.get("/users", requirePermission("usuarios.ver"), async (c) => {
+    const companyId = c.get("user")!.companyId;
     const rows = await c.get("db").select({
-      id: t.users.id, email: t.users.email, username: t.users.username, fullName: t.users.fullName, active: t.users.active,
-    }).from(t.users).where(and(eq(t.users.companyId, c.get("user")!.companyId), isNull(t.users.deletedAt)));
+      id: t.users.id,
+      email: t.users.email,
+      username: t.users.username,
+      fullName: t.users.fullName,
+      phone: t.users.phone,
+      active: t.users.active,
+      lastLoginAt: t.users.lastLoginAt,
+      roleCode: sql<string>`(select r.code from user_roles ur join roles r on r.id = ur.role_id where ur.user_id = ${t.users.id} limit 1)`,
+    }).from(t.users).where(and(eq(t.users.companyId, companyId), isNull(t.users.deletedAt))).orderBy(t.users.fullName);
     return c.json({ data: rows });
   });
 
@@ -2312,23 +2320,37 @@ function registerOps(r: Hono<AppEnv>): void {
       const db = c.get("db");
       const actor = c.get("user")!;
       const body = c.req.valid("json");
-      const [created] = await db
-        .insert(t.users)
-        .values({
-          companyId: actor.companyId,
-          email: body.email.toLowerCase(),
-          username: body.username.toLowerCase(),
-          fullName: body.fullName,
-          phone: body.phone,
-          passwordHash: await hashPassword(body.password),
-        })
-        .returning();
       const [role] = await db
         .select()
         .from(t.roles)
         .where(and(eq(t.roles.companyId, actor.companyId), eq(t.roles.code, body.roleCode)))
         .limit(1);
-      if (role && created) {
+      if (!role) throw jsonError("VALIDATION_ERROR", "Rol no válido", 400);
+      const email = body.email.trim().toLowerCase();
+      const username = body.username.trim().toLowerCase();
+      const [dup] = await db
+        .select({ id: t.users.id })
+        .from(t.users)
+        .where(
+          and(
+            eq(t.users.companyId, actor.companyId),
+            or(eq(t.users.email, email), eq(t.users.username, username)),
+          ),
+        )
+        .limit(1);
+      if (dup) throw jsonError("CONFLICT", "Ya existe un usuario con ese email o nombre de usuario", 409);
+      const [created] = await db
+        .insert(t.users)
+        .values({
+          companyId: actor.companyId,
+          email,
+          username,
+          fullName: body.fullName,
+          phone: body.phone,
+          passwordHash: await hashPassword(body.password),
+        })
+        .returning();
+      if (created) {
         await db.insert(t.userRoles).values({ userId: created.id, roleId: role.id });
       }
       await audit(db, {
@@ -2336,11 +2358,172 @@ function registerOps(r: Hono<AppEnv>): void {
         userId: actor.id,
         action: "USUARIO_MODIFICADO",
         module: "usuarios",
+        entityType: "users",
         entityId: created?.id,
+        newValues: { email, username, roleCode: body.roleCode },
       });
-      return c.json({ data: { id: created?.id, email: created?.email, username: created?.username, fullName: created?.fullName } }, 201);
+      return c.json({ data: { id: created?.id, email: created?.email, username: created?.username, fullName: created?.fullName, roleCode: body.roleCode } }, 201);
     },
   );
+
+  const userPatchSchema = z
+    .object({
+      fullName: z.string().min(1).max(200).optional(),
+      phone: z.string().max(40).nullish(),
+      active: z.boolean().optional(),
+      roleCode: z.string().min(1).optional(),
+      password: z.string().min(10).max(200).optional(),
+    })
+    .strict();
+
+  async function countActiveSuperAdmins(db: Database, companyId: string): Promise<number> {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(t.userRoles)
+      .innerJoin(t.roles, eq(t.roles.id, t.userRoles.roleId))
+      .innerJoin(t.users, eq(t.users.id, t.userRoles.userId))
+      .where(
+        and(
+          eq(t.roles.companyId, companyId),
+          eq(t.roles.code, "SUPER_ADMIN"),
+          eq(t.users.active, true),
+          isNull(t.users.deletedAt),
+        ),
+      );
+    return row?.n ?? 0;
+  }
+
+  r.patch(
+    "/users/:id",
+    requirePermission("usuarios.editar"),
+    zValidator("param", idParam),
+    zValidator("json", userPatchSchema),
+    async (c) => {
+      const db = c.get("db");
+      const actor = c.get("user")!;
+      const { id } = c.req.valid("param");
+      const body = c.req.valid("json");
+      const [target] = await db
+        .select()
+        .from(t.users)
+        .where(and(eq(t.users.id, id), eq(t.users.companyId, actor.companyId), isNull(t.users.deletedAt)))
+        .limit(1);
+      if (!target) throw jsonError("NOT_FOUND", "Usuario no encontrado", 404);
+
+      const [currentRole] = await db
+        .select({ code: t.roles.code })
+        .from(t.userRoles)
+        .innerJoin(t.roles, eq(t.roles.id, t.userRoles.roleId))
+        .where(eq(t.userRoles.userId, target.id))
+        .limit(1);
+      const wasSuperAdmin = currentRole?.code === "SUPER_ADMIN";
+      const losesSuperAdmin =
+        wasSuperAdmin && ((body.roleCode && body.roleCode !== "SUPER_ADMIN") || body.active === false);
+      if (target.id === actor.id && body.active === false) {
+        throw jsonError("VALIDATION_ERROR", "No podés desactivar tu propia cuenta", 400);
+      }
+      if (losesSuperAdmin && (await countActiveSuperAdmins(db, actor.companyId)) <= 1) {
+        throw jsonError("CONFLICT", "Debe quedar al menos un Super Admin activo", 409);
+      }
+
+      let roleId: string | null = null;
+      if (body.roleCode) {
+        const [role] = await db
+          .select({ id: t.roles.id })
+          .from(t.roles)
+          .where(and(eq(t.roles.companyId, actor.companyId), eq(t.roles.code, body.roleCode)))
+          .limit(1);
+        if (!role) throw jsonError("VALIDATION_ERROR", "Rol no válido", 400);
+        roleId = role.id;
+      }
+
+      const patch: Record<string, unknown> = { updatedAt: new Date() };
+      if (body.fullName !== undefined) patch.fullName = body.fullName;
+      if (body.phone !== undefined) patch.phone = body.phone || null;
+      if (body.active !== undefined) patch.active = body.active;
+      if (body.password) {
+        patch.passwordHash = await hashPassword(body.password);
+        patch.failedLoginCount = 0;
+        patch.lockedUntil = null;
+      }
+      const [updated] = await db.update(t.users).set(patch).where(eq(t.users.id, target.id)).returning();
+
+      if (roleId) {
+        await db.delete(t.userRoles).where(eq(t.userRoles.userId, target.id));
+        await db.insert(t.userRoles).values({ userId: target.id, roleId });
+      }
+      if (body.active === false || body.password) {
+        await db
+          .update(t.refreshTokens)
+          .set({ revokedAt: new Date() })
+          .where(and(eq(t.refreshTokens.userId, target.id), sql`${t.refreshTokens.revokedAt} is null`));
+      }
+      await audit(db, {
+        companyId: actor.companyId,
+        userId: actor.id,
+        action: "USUARIO_MODIFICADO",
+        module: "usuarios",
+        entityType: "users",
+        entityId: target.id,
+        newValues: {
+          fullName: body.fullName,
+          active: body.active,
+          roleCode: body.roleCode,
+          passwordReset: Boolean(body.password),
+        },
+      });
+      return c.json({
+        data: {
+          id: updated?.id,
+          email: updated?.email,
+          username: updated?.username,
+          fullName: updated?.fullName,
+          active: updated?.active,
+          roleCode: body.roleCode ?? currentRole?.code ?? null,
+        },
+      });
+    },
+  );
+
+  r.delete("/users/:id", requirePermission("usuarios.editar"), zValidator("param", idParam), async (c) => {
+    const db = c.get("db");
+    const actor = c.get("user")!;
+    const { id } = c.req.valid("param");
+    if (id === actor.id) throw jsonError("VALIDATION_ERROR", "No podés eliminar tu propia cuenta", 400);
+    const [target] = await db
+      .select()
+      .from(t.users)
+      .where(and(eq(t.users.id, id), eq(t.users.companyId, actor.companyId), isNull(t.users.deletedAt)))
+      .limit(1);
+    if (!target) throw jsonError("NOT_FOUND", "Usuario no encontrado", 404);
+    const [role] = await db
+      .select({ code: t.roles.code })
+      .from(t.userRoles)
+      .innerJoin(t.roles, eq(t.roles.id, t.userRoles.roleId))
+      .where(eq(t.userRoles.userId, target.id))
+      .limit(1);
+    if (role?.code === "SUPER_ADMIN" && (await countActiveSuperAdmins(db, actor.companyId)) <= 1) {
+      throw jsonError("CONFLICT", "Debe quedar al menos un Super Admin activo", 409);
+    }
+    await db
+      .update(t.users)
+      .set({ deletedAt: new Date(), active: false, updatedAt: new Date() })
+      .where(eq(t.users.id, target.id));
+    await db
+      .update(t.refreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(t.refreshTokens.userId, target.id), sql`${t.refreshTokens.revokedAt} is null`));
+    await audit(db, {
+      companyId: actor.companyId,
+      userId: actor.id,
+      action: "USUARIO_MODIFICADO",
+      module: "usuarios",
+      entityType: "users",
+      entityId: target.id,
+      newValues: { deleted: true },
+    });
+    return c.json({ data: { ok: true } });
+  });
 
   r.get("/roles", requirePermission("usuarios.ver"), async (c) => {
     const rows = await c.get("db").select().from(t.roles).where(eq(t.roles.companyId, c.get("user")!.companyId));

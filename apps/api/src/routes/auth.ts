@@ -44,12 +44,10 @@ export function authRoutes(): Hono<AppEnv> {
         )
         .limit(1);
 
-      await db.insert(loginAttempts).values({
-        companyId: user?.companyId,
-        identifier,
-        ip,
-        success: false,
-      });
+      const [attempt] = await db
+        .insert(loginAttempts)
+        .values({ companyId: user?.companyId, identifier, ip, success: false })
+        .returning({ id: loginAttempts.id });
 
       if (!user || !user.active) {
         throw jsonError("UNAUTHORIZED", "Credenciales inválidas", 401);
@@ -83,6 +81,9 @@ export function authRoutes(): Hono<AppEnv> {
         .update(users)
         .set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date(), updatedAt: new Date() })
         .where(eq(users.id, user.id));
+      if (attempt?.id) {
+        await db.update(loginAttempts).set({ success: true }).where(eq(loginAttempts.id, attempt.id));
+      }
 
       const accessToken = await signAccessToken({
         sub: user.id,
