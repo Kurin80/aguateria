@@ -42,16 +42,16 @@ export function AppLayout() {
         <button type="button" className="fixed inset-0 z-20 bg-black/40 lg:hidden" aria-label="Cerrar" onClick={() => setOpen(false)} />
       ) : null}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-72 transform bg-brand-900 text-white transition lg:static lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-72 shrink-0 transform flex-col bg-brand-900 text-white transition lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div className="flex items-center justify-between gap-3 px-5 py-6">
+        <div className="flex shrink-0 items-center justify-between gap-3 px-5 py-6">
           <div>
             <p className="text-lg font-semibold tracking-tight">Aguatería</p>
             <p className="text-xs text-white/70">{fieldOnly ? "Operación de campo" : "Gestión del servicio de agua"}</p>
           </div>
           <BrandLogo className="h-12 w-12" />
         </div>
-        <nav className="sidebar-scroll h-[calc(100vh-8rem)] overflow-y-auto px-3 pb-8 pt-4 lg:h-[calc(100vh-9rem)]">
+        <nav className="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-4">
           {groups.map((group) => (
             <div key={group.id} className="mb-4">
               <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-white/50">{group.label}</p>
@@ -72,7 +72,7 @@ export function AppLayout() {
             </div>
           ))}
         </nav>
-        <div className="absolute bottom-0 left-0 right-0 border-t border-white/10 p-4 text-xs">
+        <div className="shrink-0 border-t border-white/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-xs">
           <p className="truncate font-medium">{user?.fullName}</p>
           <p className="truncate text-white/60">{user?.roles.join(", ")}</p>
           <button type="button" className="mt-2 text-white/80 underline" onClick={() => logout()}>
