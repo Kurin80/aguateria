@@ -7,6 +7,7 @@ import { todayAsuncion } from "../lib/time.js";
 import { calculateConsumption, tariffRuleToCalc } from "./consumption.js";
 import { buildWaterBillPdf } from "./bill-pdf.js";
 import { billQrPng } from "./bill-qr.js";
+import { listOutstandingDebts } from "./invoice-from-payment.js";
 import { nextBillStatus } from "./payments-apply.js";
 
 export type GeneratedBill = {
@@ -333,6 +334,11 @@ export async function renderWaterBillPdfBuffer(db: Database, billId: string): Pr
   const [related] = bill.relatedBillId
     ? await db.select({ number: t.waterBills.number }).from(t.waterBills).where(eq(t.waterBills.id, bill.relatedBillId)).limit(1)
     : [];
+  // Lo que el cliente adeuda además de esta boleta (misma fuente que Cobranza).
+  const pendingDebts =
+    bill.kind === "CREDITO"
+      ? undefined
+      : await listOutstandingDebts(db, { companyId: bill.companyId, customerId: bill.customerId, excludeBillIds: [bill.id] });
   const pdf = await buildWaterBillPdf({
     company: company!,
     customer: customer!,
@@ -358,6 +364,7 @@ export async function renderWaterBillPdfBuffer(db: Database, billId: string): Pr
         : undefined,
     verifyUrl,
     qrPng,
+    pendingDebts,
   });
   return { pdf, number: bill.number };
 }

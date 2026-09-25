@@ -51,4 +51,23 @@ describe("PDF de boleta", () => {
     expect(pdf.includes(Buffer.from("Saldo pendiente"))).toBe(false);
     expect(pdf.includes(Buffer.from("https://aguateria.local/api/bills"))).toBe(false);
   });
+
+  it("muestra el estado de cuenta en una sola hoja aunque haya muchas deudas", async () => {
+    const pendingDebts = Array.from({ length: 40 }, (_, i) => ({
+      description: `Consumo 10 m³ · boleta B-2026-${String(i + 1).padStart(2, "0")}-CON-000008`,
+      amount: "50000.00",
+      dueOn: "2026-08-15",
+    }));
+    const pdf = await buildWaterBillPdf({
+      company: { legalName: "Prestador S.A.", tradeName: "Aguatería", ruc: "80000000", dv: "8", address: null, phone: null },
+      customer: { code: "CLI-000001", firstName: "Wilson", lastName: "Zarate", legalName: null, address: null },
+      connection: { code: "CON-000008", accountNumber: "CON-000008", address: null },
+      bill: { number: "B-2026-09-CON-000008", issuedOn: "2026-09-02", dueOn: "2026-09-15", subtotal: "45000.00", taxAmount: "4500.00", total: "49500.00", balance: "49500.00" },
+      items: [{ description: "Consumo de agua potable", quantity: "12000", total: "45000.00" }],
+      reading: { previousReading: "20.000", currentReading: "32.000", consumptionM3: "12.000" },
+      charges: { minLiters: 10000, excessLiters: 2000, billedLiters: 12000, minPayable: "40000.00", excessPayable: "9500.00", total: "49500.00" },
+      pendingDebts,
+    });
+    expect(pdfPageCount(pdf)).toBe(1);
+  });
 });

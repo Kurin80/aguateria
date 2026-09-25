@@ -47,6 +47,8 @@ type ChargeGrid = {
   excessPayable: string;
   total: string;
 } | undefined;
+/** Otras deudas del cliente (mismas que muestra Cobranza), sin esta boleta. */
+type PendingDebt = { description: string; amount: string; dueOn?: string | null };
 
 const INK = "#0B1F2A";
 const MUTED = "#5A6670";
@@ -118,6 +120,7 @@ export function buildWaterBillPdf(input: {
   reason?: string | null;
   verifyUrl?: string;
   qrPng?: Buffer | null;
+  pendingDebts?: PendingDebt[];
 }): Promise<Buffer> {
   const isCredit = input.kind === "CREDITO";
   const name = customerName(input.customer);
@@ -342,6 +345,51 @@ export function buildWaterBillPdf(input: {
     doc.font("Helvetica-Bold").fontSize(11).fillColor("#FFFFFF");
     doc.text(isCredit ? "TOTAL ACREDITADO" : "TOTAL A PAGAR", totalsX, y + 4, { width: 110 });
     doc.text(formatGs(input.bill.total), right - 90, y + 4, { width: 90, align: "right" });
+    y += 34;
+
+    if (!isCredit && input.pendingDebts) {
+      const debts = input.pendingDebts;
+      const thisBill = Number(input.bill.balance ?? input.bill.total);
+      const owed = thisBill + debts.reduce((s, d) => s + Number(d.amount), 0);
+      const rowH = 16;
+      // Hoja única: sólo las filas que entran antes del pie; el resto se resume.
+      const footerTop = pageH - 48 - 8;
+      const fixedH = 12 + 16 + rowH + 26;
+      const maxRows = Math.max(1, Math.floor((footerTop - y - fixedH) / rowH));
+      const shown = debts.length > maxRows ? debts.slice(0, maxRows - 1) : debts;
+      const hidden = debts.slice(shown.length);
+
+      doc.font("Helvetica-Bold").fontSize(7).fillColor(TEAL).text("ESTADO DE CUENTA DEL CLIENTE", left, y);
+      y = doc.y + 4;
+      doc.rect(left, y, contentW, 16).fill(INK);
+      doc.font("Helvetica-Bold").fontSize(7).fillColor("#FFFFFF");
+      doc.text("Concepto adeudado", left + 8, y + 4);
+      doc.text("Vence", cols.qty - 20, y + 4, { width: 70, align: "right" });
+      doc.text("Importe", cols.amount - 70, y + 4, { width: 62, align: "right" });
+      y += 16;
+      const row = (idx: number, label: string, due: string, amount: number) => {
+        if (idx % 2 === 1) doc.rect(left, y, contentW, rowH).fill(SURFACE);
+        doc.font("Helvetica").fontSize(8).fillColor(INK);
+        doc.text(label, left + 8, y + 4, { width: 300, lineBreak: false, ellipsis: true });
+        doc.text(due, cols.qty - 20, y + 4, { width: 70, align: "right" });
+        doc.text(formatGs(amount), cols.amount - 78, y + 4, { width: 70, align: "right" });
+        y += rowH;
+      };
+      shown.forEach((d, i) => row(i, d.description, d.dueOn ? formatDatePy(d.dueOn) : "—", Number(d.amount)));
+      if (hidden.length) {
+        row(shown.length, `Otras ${hidden.length} deudas pendientes`, "—", hidden.reduce((s, d) => s + Number(d.amount), 0));
+      }
+      row(shown.length + (hidden.length ? 1 : 0), `Esta boleta ${input.bill.number}`, formatDatePy(input.bill.dueOn), thisBill);
+      doc.moveTo(left, y).lineTo(right, y).lineWidth(0.4).stroke(LINE);
+      y += 6;
+      doc.rect(totalsX - 8, y - 2, 228, 22).fill(GOLD);
+      doc.font("Helvetica-Bold").fontSize(11).fillColor(INK);
+      doc.text("TOTAL ADEUDADO", totalsX, y + 4, { width: 120 });
+      doc.text(formatGs(owed), right - 90, y + 4, { width: 90, align: "right" });
+      if (!debts.length) {
+        doc.font("Helvetica").fontSize(7).fillColor(MUTED).text("Sin deudas anteriores pendientes.", left, y + 6, { width: totalsX - left - 16 });
+      }
+    }
 
     doc.end();
   });
