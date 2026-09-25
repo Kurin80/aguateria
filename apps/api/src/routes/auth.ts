@@ -108,6 +108,7 @@ export function authRoutes(): Hono<AppEnv> {
         action: "LOGIN",
         module: "auth",
         ip,
+        userAgent: c.req.header("user-agent"),
         deviceId: body.deviceId,
       });
 
@@ -170,6 +171,14 @@ export function authRoutes(): Hono<AppEnv> {
       .update(refreshTokens)
       .set({ revokedAt: new Date() })
       .where(and(eq(refreshTokens.userId, user.id), sql`${refreshTokens.revokedAt} is null`));
+    await audit(db, {
+      companyId: user.companyId,
+      userId: user.id,
+      action: "LOGOUT",
+      module: "auth",
+      ip: clientIp(c),
+      userAgent: c.req.header("user-agent"),
+    });
     return c.json({ data: { ok: true } });
   });
 

@@ -2574,10 +2574,82 @@ function registerOps(r: Hono<AppEnv>): void {
     return c.json({ data: rows });
   });
 
-  r.get("/audit-logs", requirePermission("auditoria.ver"), zValidator("query", paginationQuery), async (c) => {
-    const { page, pageSize } = c.req.valid("query");
-    const rows = await c.get("db").select().from(t.auditLogs).where(eq(t.auditLogs.companyId, c.get("user")!.companyId)).orderBy(desc(t.auditLogs.createdAt)).limit(pageSize).offset((page - 1) * pageSize);
-    return c.json({ data: rows });
+  const auditQuery = paginationQuery.extend({
+    userId: z.string().uuid().optional(),
+    module: z.string().trim().max(60).optional(),
+    kind: z.enum(["ingresos", "acciones"]).optional(),
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  });
+  const SESSION_ACTIONS = ["LOGIN", "LOGOUT", "LOGIN_FAILED"];
+
+  r.get("/audit-logs", requirePermission("auditoria.ver"), zValidator("query", auditQuery), async (c) => {
+    const { page, pageSize, q, userId, module, kind, from, to } = c.req.valid("query");
+    const db = c.get("db");
+    // Fechas en hora de Paraguay, no UTC.
+    const localDay = sql`(${t.auditLogs.createdAt} at time zone 'America/Asuncion')::date`;
+    const where = and(
+      eq(t.auditLogs.companyId, c.get("user")!.companyId),
+      userId ? eq(t.auditLogs.userId, userId) : undefined,
+      module ? eq(t.auditLogs.module, module) : undefined,
+      kind === "ingresos" ? inArray(t.auditLogs.action, SESSION_ACTIONS) : undefined,
+      kind === "acciones" ? sql`${t.auditLogs.action} not in ('LOGIN', 'LOGOUT', 'LOGIN_FAILED')` : undefined,
+      from ? sql`${localDay} >= ${from}::date` : undefined,
+      to ? sql`${localDay} <= ${to}::date` : undefined,
+      q
+        ? or(
+            ilike(t.auditLogs.action, `%${q}%`),
+            ilike(t.auditLogs.module, `%${q}%`),
+            ilike(t.users.fullName, `%${q}%`),
+            ilike(t.users.email, `%${q}%`),
+            ilike(t.users.username, `%${q}%`),
+          )
+        : undefined,
+    );
+    const rows = await db
+      .select({
+        id: t.auditLogs.id,
+        action: t.auditLogs.action,
+        module: t.auditLogs.module,
+        entityType: t.auditLogs.entityType,
+        entityId: t.auditLogs.entityId,
+        ip: t.auditLogs.ip,
+        userAgent: t.auditLogs.userAgent,
+        createdAt: t.auditLogs.createdAt,
+        userId: t.auditLogs.userId,
+        userName: t.users.fullName,
+        userEmail: t.users.email,
+      })
+      .from(t.auditLogs)
+      .leftJoin(t.users, eq(t.users.id, t.auditLogs.userId))
+      .where(where)
+      .orderBy(desc(t.auditLogs.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+    const [count] = await db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(t.auditLogs)
+      .leftJoin(t.users, eq(t.users.id, t.auditLogs.userId))
+      .where(where);
+    return c.json({ data: rows, meta: { page, pageSize, total: count?.total ?? 0 } });
+  });
+
+  // Opciones de filtro: sólo usuarios y módulos que aparecen en la auditoría.
+  r.get("/audit-logs/filters", requirePermission("auditoria.ver"), async (c) => {
+    const db = c.get("db");
+    const companyId = c.get("user")!.companyId;
+    const users = await db
+      .selectDistinct({ id: t.users.id, fullName: t.users.fullName, email: t.users.email })
+      .from(t.auditLogs)
+      .innerJoin(t.users, eq(t.users.id, t.auditLogs.userId))
+      .where(eq(t.auditLogs.companyId, companyId))
+      .orderBy(t.users.fullName);
+    const modules = await db
+      .selectDistinct({ module: t.auditLogs.module })
+      .from(t.auditLogs)
+      .where(eq(t.auditLogs.companyId, companyId))
+      .orderBy(t.auditLogs.module);
+    return c.json({ data: { users, modules: modules.map((m) => m.module) } });
   });
 
   r.get("/notifications", async (c) => {

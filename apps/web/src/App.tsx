@@ -20,6 +20,7 @@ import { InstallationsPage } from "./pages/InstallationsPage";
 import { CollectionPage } from "./pages/CollectionPage";
 import { DisconnectionsPage } from "./pages/DisconnectionsPage";
 import { UsersPage } from "./pages/UsersPage";
+import { AuditPage } from "./pages/AuditPage";
 
 const MapPage = lazy(() => import("./pages/MapPage").then((m) => ({ default: m.MapPage })));
 
@@ -448,20 +449,7 @@ export default function App() {
         />
         <Route path="reportes" element={<ReportsPage />} />
         <Route path="usuarios" element={<UsersPage />} />
-        <Route
-          path="auditoria"
-          element={
-            <ResourcePage
-              title="Auditoría"
-              path="/audit-logs"
-              columns={[
-                { key: "action", label: "Acción" },
-                { key: "module", label: "Módulo" },
-                { key: "createdAt", label: "Fecha" },
-              ]}
-            />
-          }
-        />
+        <Route path="auditoria" element={<AuditPage />} />
         <Route
           path="regulacion"
           element={
